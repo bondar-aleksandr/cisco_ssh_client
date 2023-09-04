@@ -1,0 +1,10 @@
+*.txt
+*.csv
+*.exe
+*.json
+*.cfg
+*.pdf
+go.sum
+.idea
+.vscode
+test_data/
