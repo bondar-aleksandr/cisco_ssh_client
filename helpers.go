@@ -2,11 +2,12 @@ package main
 
 import (
 	"bufio"
+	"gopkg.in/yaml.v3"
 	"os"
 )
 
-// func received list of Devices, walk through it, finds unique filenames,  and populates
-// cmdCache variable with mapping
+// func receives list of Devices, walk through it, finds unique filenames, and populates
+// cmdCache variable with mapping filename:Commands
 func BuildCmdCache(entries []*Device) {
 	for _, entry := range entries {
 		commandsFile, err := os.Open(entry.CmdFile)
@@ -28,5 +29,21 @@ func BuildCmdCache(entries []*Device) {
 		}
 		// add data to cache
 		cmdCache[entry.CmdFile] = &commands
+	}
+}
+
+// this func reads config.yml content to config variable
+func readConfig(cfg *config) {
+
+	f, err := os.Open(configPath)
+	if err != nil {
+		ErrorLogger.Fatalf("Cannot read app config file because of: %s", err)
+	}
+	defer f.Close()
+
+	decoder := yaml.NewDecoder(f)
+	err = decoder.Decode(cfg)
+	if err != nil {
+		ErrorLogger.Fatalf("Cannot parse app config file because of: %s", err)
 	}
 }

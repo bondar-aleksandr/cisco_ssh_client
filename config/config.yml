@@ -1,0 +1,6 @@
+client:
+  ssh_timeout: 2  #seconds
+data:
+  input_folder: "./input/"
+  devices_data: "devices.csv"
+  output_folder: "./output/"

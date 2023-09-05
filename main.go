@@ -8,6 +8,8 @@ import (
 	"github.com/gocarina/gocsv"
 	"log"
 	"os"
+	"path/filepath"
+	"time"
 )
 
 // describes entry in csv device file
@@ -18,6 +20,18 @@ type Device struct {
 	OsType    string `csv:"osType"`
 	Configure bool   `csv:"configure"`
 	CmdFile   string `csv:"CmdFile"`
+}
+
+// type for app-level config
+type config struct {
+	Client struct {
+		SSHTimeout int64 `yaml:"ssh_timeout"`
+	}
+	Data struct {
+		InputFolder  string `yaml:"input_folder"`
+		DevicesData  string `yaml:"devices_data"`
+		OutputFolder string `yaml:"output_folder"`
+	}
 }
 
 // type used for storing all commands from single command file
@@ -32,6 +46,9 @@ func (c *Commands) Add(cmd string) {
 // stores mapping between command file and its content, only unique entries present
 var cmdCache = make(map[string]*Commands)
 
+var configPath = "./config/config.yml"
+var appConfig config
+
 var (
 	InfoLogger  *log.Logger = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger *log.Logger = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -41,8 +58,14 @@ func main() {
 
 	InfoLogger.Println("Starting...")
 
+	InfoLogger.Println("Reading config...")
+	readConfig(&appConfig)
+	InfoLogger.Println("Reading config done")
+
 	//Parse CSV with devices info to memory
-	deviceFile, err := os.Open("devices.csv")
+	InfoLogger.Println("Decoding devices data...")
+
+	deviceFile, err := os.Open(filepath.Join(appConfig.Data.InputFolder, appConfig.Data.DevicesData))
 	if err != nil {
 		ErrorLogger.Fatal(err)
 	}
@@ -53,16 +76,21 @@ func main() {
 	if err := gocsv.UnmarshalFile(deviceFile, &devices); err != nil {
 		ErrorLogger.Fatalf("Cannot unmarshal CSV from file because of: %s", err)
 	}
+	InfoLogger.Println("Decoding devices data done")
 
 	//build command files cache
+	InfoLogger.Println("Building cmd cache...")
 	BuildCmdCache(devices)
-	InfoLogger.Println("Successfully build cmd cache...")
+	InfoLogger.Println("Building cmd cache done")
 
+	// looping over devices
 	for _, d := range devices {
 
+		InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 		device, err := netrasp.New(d.Hostname,
 			netrasp.WithUsernamePassword(d.Login, d.Password),
 			netrasp.WithDriver(d.OsType), netrasp.WithInsecureIgnoreHostKey(),
+			netrasp.WithDialTimeout(time.Duration(appConfig.Client.SSHTimeout)*time.Second),
 		)
 		if err != nil {
 			ErrorLogger.Fatalf("unable to initialize device: %v", err)
@@ -73,6 +101,7 @@ func main() {
 			ErrorLogger.Fatalf("unable to connect: %v", err)
 		}
 		defer device.Close(context.Background())
+		InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
 
 		// switch between config/show commands
 		if d.Configure {
