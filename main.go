@@ -45,23 +45,17 @@ func (c *Commands) Add(cmd string) {
 
 // stores mapping between command file and its content, only unique entries present
 var cmdCache = make(map[string]*Commands)
-
 var configPath = "./config/config.yml"
 var appConfig config
-
 var (
 	InfoLogger  *log.Logger = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger *log.Logger = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 func main() {
-
 	InfoLogger.Println("Starting...")
 
-	InfoLogger.Println("Reading config...")
 	readConfig(&appConfig)
-	InfoLogger.Println("Reading config done")
-	//TODO: print config parameters
 
 	//Parse CSV with devices info to memory
 	InfoLogger.Println("Decoding devices data...")
@@ -80,9 +74,7 @@ func main() {
 	InfoLogger.Println("Decoding devices data done")
 
 	//build command files cache
-	InfoLogger.Println("Building cmd cache...")
-	BuildCmdCache(devices)
-	InfoLogger.Println("Building cmd cache done")
+	buildCmdCache(devices)
 
 	// looping over devices
 	for _, d := range devices {
@@ -110,7 +102,7 @@ func main() {
 			res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
 
 			if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
-				ErrorLogger.Printf("device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
+				ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
 			} else if err != nil {
 				ErrorLogger.Fatalf("unable to configure device %s: %v", d.Hostname, err)
 			} else if err == nil {
