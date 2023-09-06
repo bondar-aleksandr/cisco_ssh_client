@@ -61,6 +61,7 @@ func main() {
 	InfoLogger.Println("Reading config...")
 	readConfig(&appConfig)
 	InfoLogger.Println("Reading config done")
+	//TODO: print config parameters
 
 	//Parse CSV with devices info to memory
 	InfoLogger.Println("Decoding devices data...")
@@ -71,7 +72,7 @@ func main() {
 	}
 	defer deviceFile.Close()
 
-	devices := []*Device{}
+	var devices []*Device
 
 	if err := gocsv.UnmarshalFile(deviceFile, &devices); err != nil {
 		ErrorLogger.Fatalf("Cannot unmarshal CSV from file because of: %s", err)
@@ -104,22 +105,26 @@ func main() {
 		InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
 
 		// switch between config/show commands
+		InfoLogger.Printf("Configuring device %q...\n", d.Hostname)
 		if d.Configure {
 			res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
 
 			if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
-				InfoLogger.Println("one of config commands failed, further commands skipped!")
+				ErrorLogger.Printf("device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
 			} else if err != nil {
-				ErrorLogger.Fatalf("unable to configure device: %v", err)
+				ErrorLogger.Fatalf("unable to configure device %s: %v", d.Hostname, err)
+			} else if err == nil {
+				InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
 			}
 			//config result analysis
-			for _, r := range res.ConfigCommands {
-				commandStatus := true
-				if r.Output != "" {
-					commandStatus = false
-				}
-				InfoLogger.Printf("command: %q success: %t, message: %s", r.Command, commandStatus, r.Output)
+			InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
+			err = storeConfigResult(&res, d.Hostname)
+			if err != nil {
+				ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
+			} else {
+				InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
 			}
+
 		} else {
 			for _, cmd := range cmdCache[d.CmdFile].Commands {
 				res, err := device.Run(context.Background(), cmd)
