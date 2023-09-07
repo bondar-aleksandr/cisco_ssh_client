@@ -62,7 +62,7 @@ func readConfig(cfg *config) {
 // this func stores config output to file
 func storeConfigResult(res *netrasp.ConfigResult, hostname string) error {
 
-	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, hostname+"_configStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
+	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
 	if err != nil {
 		ErrorLogger.Printf("Unable to open output file for device %s because of: %s", hostname, err)
 		return err
@@ -70,6 +70,8 @@ func storeConfigResult(res *netrasp.ConfigResult, hostname string) error {
 	defer f.Close()
 	writer := bufio.NewWriter(f)
 
+	//TODO: consider not only config commands output, but show also
+	//TODO: improve performance of outputCleanup func
 	for _, r := range res.ConfigCommands {
 		commandStatus := true
 		commandError := "none"
@@ -77,8 +79,8 @@ func storeConfigResult(res *netrasp.ConfigResult, hostname string) error {
 			commandStatus = false
 			commandError = outputCleanup(r.Output)
 		}
-		row := fmt.Sprintf("time: %q, device: %q, command: %q, accepted: %t, error: %q\n",
-			time.Now().Format(time.RFC822), hostname, r.Command, commandStatus, commandError)
+		row := fmt.Sprintf("time: %q, device: %q, command: %q, accepted: %t, error: %q\n%s",
+			time.Now().Format(time.RFC822), hostname, r.Command, commandStatus, commandError, r.Output)
 
 		writer.WriteString(row)
 	}

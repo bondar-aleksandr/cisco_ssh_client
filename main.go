@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 	"github.com/gocarina/gocsv"
 	"log"
@@ -118,14 +117,16 @@ func main() {
 			}
 
 		} else {
+			var result netrasp.ConfigResult
 			for _, cmd := range cmdCache[d.CmdFile].Commands {
 				res, err := device.Run(context.Background(), cmd)
 				if err != nil {
 					ErrorLogger.Printf("unable to run command %s\n", cmd)
 					continue
 				}
-				fmt.Println(res)
+				result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})
 			}
+			err = storeConfigResult(&result, d.Hostname)
 		}
 	}
 }
