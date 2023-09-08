@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 	"github.com/gocarina/gocsv"
 	"log"
@@ -43,6 +44,17 @@ func (c *Commands) Add(cmd string) {
 	c.Commands = append(c.Commands, cmd)
 }
 
+// type describes cli error
+type cliError struct {
+	device string
+	cmd    string
+	error  string
+}
+
+func (c cliError) String() string {
+	return fmt.Sprintf("device: %q, command: %q, error: %q", c.device, c.cmd, c.error)
+}
+
 // stores mapping between command file and its content, only unique entries present
 var cmdCache = make(map[string]*Commands)
 var configPath = "./config/config.yml"
@@ -53,7 +65,7 @@ var (
 )
 
 // this func connects to device and issue cli commands
-func runCommands(d *Device, wg *sync.WaitGroup) {
+func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 	defer wg.Done()
 	device, err := netrasp.New(d.Hostname,
@@ -88,7 +100,7 @@ func runCommands(d *Device, wg *sync.WaitGroup) {
 		}
 		//output analysis
 		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-		err = storeDeviceOutput(&res, d.Hostname, d.Configure)
+		err = storeDeviceOutput(&res, d.Hostname, d.Configure, cliErrChan)
 		if err != nil {
 			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
 		} else {
@@ -109,7 +121,7 @@ func runCommands(d *Device, wg *sync.WaitGroup) {
 		}
 		//output analysis
 		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-		err = storeDeviceOutput(&result, d.Hostname, d.Configure)
+		err = storeDeviceOutput(&result, d.Hostname, d.Configure, cliErrChan)
 		if err != nil {
 			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
 		} else {
@@ -147,10 +159,19 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(len(devices))
 
+	//channel for cli errors notification
+	cliErrChan := make(chan cliError, 100)
+
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &wg)
+		go runCommands(d, &wg, cliErrChan)
 	}
 	wg.Wait()
+	close(cliErrChan)
+
+	// read cli errors from cliErrChan
+	for e := range cliErrChan {
+		ErrorLogger.Printf("Got command apply error: %s", e)
+	}
 	InfoLogger.Printf("Finished! Time taken: %s\n", time.Since(start))
 }

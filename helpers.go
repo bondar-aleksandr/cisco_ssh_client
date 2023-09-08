@@ -60,7 +60,7 @@ func readConfig(cfg *config) {
 }
 
 // this func stores commands output to file, config and non-config commands have different output formatting
-func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confCommands bool) error {
+func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confCommands bool, cliErrChan chan<- cliError) error {
 
 	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
 	if err != nil {
@@ -87,6 +87,10 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confComman
 			}
 			partialOutput := strings.Join(strings.Split(r.Output, "\n")[:linesToSlice], "\n")
 			commandError, errFound = detectCliErrors(partialOutput)
+		}
+
+		if errFound {
+			cliErrChan <- cliError{device: hostname, cmd: r.Command, error: commandError}
 		}
 
 		var row string
