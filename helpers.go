@@ -59,8 +59,8 @@ func readConfig(cfg *config) {
 	//TODO: print config parameters
 }
 
-// this func stores config output to file
-func storeConfigResult(res *netrasp.ConfigResult, hostname string) error {
+// this func stores commands output to file, config and non-config commands have different output formatting
+func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confCommands bool) error {
 
 	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
 	if err != nil {
@@ -69,22 +69,42 @@ func storeConfigResult(res *netrasp.ConfigResult, hostname string) error {
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
+	writer.WriteString(fmt.Sprintf("======================== %q =======================\n", time.Now().Format(time.RFC822)))
 
-	//TODO: consider not only config commands output, but show also
-	//TODO: improve performance of outputCleanup func
-	for _, r := range res.ConfigCommands {
-		commandStatus := true
-		commandError := "none"
-		if r.Output != "" {
-			commandStatus = false
-			commandError = outputCleanup(r.Output)
+	for _, r := range inData.ConfigCommands {
+		var commandError string
+		var errFound bool
+
+		if confCommands {
+			commandError, errFound = detectCliErrors(r.Output)
+		} else {
+			// need to trim output to up to first 3 lines, because error message contained there
+			linesCount := len(strings.Split(r.Output, "\n"))
+			var linesToSlice = 3
+			if linesCount < 3 {
+				// some errors output are just one line
+				linesToSlice = 1
+			}
+			partialOutput := strings.Join(strings.Split(r.Output, "\n")[:linesToSlice], "\n")
+			commandError, errFound = detectCliErrors(partialOutput)
 		}
-		row := fmt.Sprintf("time: %q, device: %q, command: %q, accepted: %t, error: %q\n%s",
-			time.Now().Format(time.RFC822), hostname, r.Command, commandStatus, commandError, r.Output)
 
+		var row string
+		if confCommands {
+			row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n",
+				hostname, r.Command, !errFound, commandError)
+		} else {
+			if errFound {
+				row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n==========================================\n",
+					hostname, r.Command, !errFound, commandError)
+			} else {
+				row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q output:\n%s\n==========================================\n",
+					hostname, r.Command, !errFound, commandError, r.Output)
+			}
+		}
 		writer.WriteString(row)
 	}
-	writer.WriteString("==========================================\n")
+
 	err = writer.Flush()
 	if err != nil {
 		ErrorLogger.Printf("Unable to write output for device %q to file %q\n", hostname, f.Name())
@@ -93,15 +113,18 @@ func storeConfigResult(res *netrasp.ConfigResult, hostname string) error {
 	return nil
 }
 
-// this func does wrong command output cleanup from spaces, \n, ^ , etc.
-func outputCleanup(input string) string {
+// this func looks for error in CLI output (string started with %s). Returns
+// string with error and bool if error found
+func detectCliErrors(input string) (string, bool) {
 	rows := strings.Split(input, "\n")
-	var res string
+	var cliErr string
+	var errFound bool
 	for _, r := range rows {
 		if strings.HasPrefix(r, "%") {
-			res = r
+			cliErr = r
+			errFound = true
 			break
 		}
 	}
-	return res
+	return cliErr, errFound
 }

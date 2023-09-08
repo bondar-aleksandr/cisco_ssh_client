@@ -96,20 +96,20 @@ func main() {
 		InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
 
 		// switch between config/show commands
-		InfoLogger.Printf("Configuring device %q...\n", d.Hostname)
+		InfoLogger.Printf("Running commands for device %q...\n", d.Hostname)
 		if d.Configure {
 			res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
 
 			if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
 				ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
 			} else if err != nil {
-				ErrorLogger.Fatalf("unable to configure device %s: %v", d.Hostname, err)
+				ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
 			} else if err == nil {
 				InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
 			}
-			//config result analysis
+			//output analysis
 			InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-			err = storeConfigResult(&res, d.Hostname)
+			err = storeDeviceOutput(&res, d.Hostname, d.Configure)
 			if err != nil {
 				ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
 			} else {
@@ -117,6 +117,8 @@ func main() {
 			}
 
 		} else {
+			// need to construct the same data type as device.Configure method output uses
+			// in order to use the same "storeDeviceOutput" processing function further
 			var result netrasp.ConfigResult
 			for _, cmd := range cmdCache[d.CmdFile].Commands {
 				res, err := device.Run(context.Background(), cmd)
@@ -126,7 +128,14 @@ func main() {
 				}
 				result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})
 			}
-			err = storeConfigResult(&result, d.Hostname)
+			//output analysis
+			InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
+			err = storeDeviceOutput(&result, d.Hostname, d.Configure)
+			if err != nil {
+				ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
+			} else {
+				InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
+			}
 		}
 	}
 }
