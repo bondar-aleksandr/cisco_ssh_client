@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -51,14 +52,81 @@ var (
 	ErrorLogger *log.Logger = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
+// this func connects to device and issue cli commands
+func runCommands(d *Device, wg *sync.WaitGroup) {
+	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
+	defer wg.Done()
+	device, err := netrasp.New(d.Hostname,
+		netrasp.WithUsernamePassword(d.Login, d.Password),
+		netrasp.WithDriver(d.OsType), netrasp.WithInsecureIgnoreHostKey(),
+		netrasp.WithDialTimeout(time.Duration(appConfig.Client.SSHTimeout)*time.Second),
+	)
+	if err != nil {
+		ErrorLogger.Printf("unable to initialize device: %v\n", err)
+		return
+	}
+
+	err = device.Dial(context.Background())
+	if err != nil {
+		ErrorLogger.Printf("unable to connect: %v\n", err)
+		return
+	}
+	defer device.Close(context.Background())
+	InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
+
+	// switch between config/show commands
+	InfoLogger.Printf("Running commands for device %q...\n", d.Hostname)
+	if d.Configure {
+		res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
+
+		if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
+			ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
+		} else if err != nil {
+			ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
+		} else if err == nil {
+			InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
+		}
+		//output analysis
+		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
+		err = storeDeviceOutput(&res, d.Hostname, d.Configure)
+		if err != nil {
+			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
+		} else {
+			InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
+		}
+
+	} else {
+		// need to construct the same data type as device.Configure method output uses
+		// in order to use the same "storeDeviceOutput" processing function further
+		var result netrasp.ConfigResult
+		for _, cmd := range cmdCache[d.CmdFile].Commands {
+			res, err := device.Run(context.Background(), cmd)
+			if err != nil {
+				ErrorLogger.Printf("unable to run command %s\n", cmd)
+				continue
+			}
+			result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})
+		}
+		//output analysis
+		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
+		err = storeDeviceOutput(&result, d.Hostname, d.Configure)
+		if err != nil {
+			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
+		} else {
+			InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
+		}
+	}
+}
+
 func main() {
+	start := time.Now()
 	InfoLogger.Println("Starting...")
 
+	// read app config
 	readConfig(&appConfig)
 
 	//Parse CSV with devices info to memory
 	InfoLogger.Println("Decoding devices data...")
-
 	deviceFile, err := os.Open(filepath.Join(appConfig.Data.InputFolder, appConfig.Data.DevicesData))
 	if err != nil {
 		ErrorLogger.Fatal(err)
@@ -75,67 +143,14 @@ func main() {
 	//build command files cache
 	buildCmdCache(devices)
 
+	// initialize wg to sync goroutines
+	var wg sync.WaitGroup
+	wg.Add(len(devices))
+
 	// looping over devices
 	for _, d := range devices {
-
-		InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
-		device, err := netrasp.New(d.Hostname,
-			netrasp.WithUsernamePassword(d.Login, d.Password),
-			netrasp.WithDriver(d.OsType), netrasp.WithInsecureIgnoreHostKey(),
-			netrasp.WithDialTimeout(time.Duration(appConfig.Client.SSHTimeout)*time.Second),
-		)
-		if err != nil {
-			ErrorLogger.Fatalf("unable to initialize device: %v", err)
-		}
-
-		err = device.Dial(context.Background())
-		if err != nil {
-			ErrorLogger.Fatalf("unable to connect: %v", err)
-		}
-		defer device.Close(context.Background())
-		InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
-
-		// switch between config/show commands
-		InfoLogger.Printf("Running commands for device %q...\n", d.Hostname)
-		if d.Configure {
-			res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
-
-			if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
-				ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
-			} else if err != nil {
-				ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
-			} else if err == nil {
-				InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
-			}
-			//output analysis
-			InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-			err = storeDeviceOutput(&res, d.Hostname, d.Configure)
-			if err != nil {
-				ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
-			} else {
-				InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
-			}
-
-		} else {
-			// need to construct the same data type as device.Configure method output uses
-			// in order to use the same "storeDeviceOutput" processing function further
-			var result netrasp.ConfigResult
-			for _, cmd := range cmdCache[d.CmdFile].Commands {
-				res, err := device.Run(context.Background(), cmd)
-				if err != nil {
-					ErrorLogger.Printf("unable to run command %s\n", cmd)
-					continue
-				}
-				result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})
-			}
-			//output analysis
-			InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-			err = storeDeviceOutput(&result, d.Hostname, d.Configure)
-			if err != nil {
-				ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
-			} else {
-				InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
-			}
-		}
+		go runCommands(d, &wg)
 	}
+	wg.Wait()
+	InfoLogger.Printf("Finished! Time taken: %s\n", time.Since(start))
 }
