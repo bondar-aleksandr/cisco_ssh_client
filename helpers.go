@@ -60,11 +60,11 @@ func readConfig(cfg *config) {
 }
 
 // this func stores commands output to file, config and non-config commands have different output formatting
-func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confCommands bool, cliErrChan chan<- cliError) error {
+func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<- cliError) error {
 
-	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
+	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, d.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
 	if err != nil {
-		ErrorLogger.Printf("Unable to open output file for device %s because of: %s", hostname, err)
+		ErrorLogger.Printf("Unable to open output file for device %s because of: %s", d.Hostname, err)
 		return err
 	}
 	defer f.Close()
@@ -75,7 +75,7 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confComman
 		var commandError string
 		var errFound bool
 
-		if confCommands {
+		if d.Configure {
 			commandError, errFound = detectCliErrors(r.Output)
 		} else {
 			// need to trim output to up to first 3 lines, because error message contained there
@@ -90,28 +90,32 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, hostname string, confComman
 		}
 
 		if errFound {
-			cliErrChan <- cliError{device: hostname, cmd: r.Command, error: commandError}
+			d.State = CmdPartiallyAccepted
+			cliErrChan <- cliError{device: d.Hostname, cmd: r.Command, error: commandError}
 		}
 
 		var row string
-		if confCommands {
+		if d.Configure {
 			row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n",
-				hostname, r.Command, !errFound, commandError)
+				d.Hostname, r.Command, !errFound, commandError)
 		} else {
+			row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q output:\n%s\n==========================================\n",
+				d.Hostname, r.Command, !errFound, commandError, r.Output)
 			if errFound {
 				row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n==========================================\n",
-					hostname, r.Command, !errFound, commandError)
-			} else {
-				row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q output:\n%s\n==========================================\n",
-					hostname, r.Command, !errFound, commandError, r.Output)
+					d.Hostname, r.Command, !errFound, commandError)
 			}
+			//} else {
+			//	row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q output:\n%s\n==========================================\n",
+			//		d.Hostname, r.Command, !errFound, commandError, r.Output)
+			//}
 		}
 		writer.WriteString(row)
 	}
 
 	err = writer.Flush()
 	if err != nil {
-		ErrorLogger.Printf("Unable to write output for device %q to file %q\n", hostname, f.Name())
+		ErrorLogger.Printf("Unable to write output for device %q to file %q\n", d.Hostname, f.Name())
 		return err
 	}
 	return nil

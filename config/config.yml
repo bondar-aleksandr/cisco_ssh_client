@@ -4,3 +4,4 @@ data:
   input_folder: "./input/"
   devices_data: "devices.csv"
   output_folder: "./output/"
+  results_data: "results.txt"

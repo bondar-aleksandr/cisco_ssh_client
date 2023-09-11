@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 	"github.com/gocarina/gocsv"
+	"github.com/olekukonko/tablewriter"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +24,7 @@ type Device struct {
 	OsType    string `csv:"osType"`
 	Configure bool   `csv:"configure"`
 	CmdFile   string `csv:"CmdFile"`
+	State     string
 }
 
 // type for app-level config
@@ -32,6 +36,7 @@ type config struct {
 		InputFolder  string `yaml:"input_folder"`
 		DevicesData  string `yaml:"devices_data"`
 		OutputFolder string `yaml:"output_folder"`
+		ResultsData  string `yaml:"results_data"`
 	}
 }
 
@@ -51,9 +56,21 @@ type cliError struct {
 	error  string
 }
 
-func (c cliError) String() string {
-	return fmt.Sprintf("device: %q, command: %q, error: %q", c.device, c.cmd, c.error)
+// type describes general connectivity errors
+type connError struct {
+	device string
+	error  error
 }
+
+// to describe command run status
+const (
+	Ok                   = "Success"
+	Unreachable          = "Unreachable"
+	Unknown              = "Unknown"
+	SshAuthFailure       = "SSH authentication failure"
+	PermissionProblem    = "Permission problem"
+	CmdPartiallyAccepted = "Commands accepted with errors"
+)
 
 // stores mapping between command file and its content, only unique entries present
 var cmdCache = make(map[string]*Commands)
@@ -61,11 +78,11 @@ var configPath = "./config/config.yml"
 var appConfig config
 var (
 	InfoLogger  *log.Logger = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger *log.Logger = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 // this func connects to device and issue cli commands
-func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
+func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, connErrChan chan<- connError) {
 	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 	defer wg.Done()
 	device, err := netrasp.New(d.Hostname,
@@ -75,12 +92,19 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 	)
 	if err != nil {
 		ErrorLogger.Printf("unable to initialize device: %v\n", err)
+		d.State = Unknown
+		connErrChan <- connError{device: d.Hostname, error: err}
 		return
 	}
 
 	err = device.Dial(context.Background())
 	if err != nil {
-		ErrorLogger.Printf("unable to connect: %v\n", err)
+		d.State = Unreachable
+		if strings.Contains(err.Error(), "unable to authenticate") {
+			d.State = SshAuthFailure
+		}
+		ErrorLogger.Println(err)
+		connErrChan <- connError{device: d.Hostname, error: err}
 		return
 	}
 	defer device.Close(context.Background())
@@ -93,14 +117,19 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 
 		if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
 			ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
+			d.State = CmdPartiallyAccepted
+			connErrChan <- connError{device: d.Hostname, error: err}
 		} else if err != nil {
 			ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
+			d.State = PermissionProblem
+			connErrChan <- connError{device: d.Hostname, error: err}
 		} else if err == nil {
+			d.State = Ok
 			InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
 		}
 		//output analysis
 		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-		err = storeDeviceOutput(&res, d.Hostname, d.Configure, cliErrChan)
+		err = storeDeviceOutput(&res, d, cliErrChan)
 		if err != nil {
 			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
 		} else {
@@ -115,13 +144,18 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 			res, err := device.Run(context.Background(), cmd)
 			if err != nil {
 				ErrorLogger.Printf("unable to run command %s\n", cmd)
+				//TODO: find out in which cases this err may show up
+				d.State = Unknown
+				connErrChan <- connError{device: d.Hostname, error: err}
 				continue
 			}
 			result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})
 		}
+		d.State = Ok
+		InfoLogger.Printf("Run commands for %q successfully\n", d.Hostname)
 		//output analysis
 		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-		err = storeDeviceOutput(&result, d.Hostname, d.Configure, cliErrChan)
+		err = storeDeviceOutput(&result, d, cliErrChan)
 		if err != nil {
 			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
 		} else {
@@ -161,17 +195,44 @@ func main() {
 
 	//channel for cli errors notification
 	cliErrChan := make(chan cliError, 100)
+	//channel for general errors notification
+	connErrChan := make(chan connError, len(devices))
 
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &wg, cliErrChan)
+		go runCommands(d, &wg, cliErrChan, connErrChan)
 	}
 	wg.Wait()
 	close(cliErrChan)
+	close(connErrChan)
+
+	// read connectivity errors from connErrChan
+	for e := range connErrChan {
+		ErrorLogger.Printf("Got general failure, device: %q, error: %q", e.device, e.error)
+	}
 
 	// read cli errors from cliErrChan
 	for e := range cliErrChan {
-		ErrorLogger.Printf("Got command apply error: %s", e)
+		ErrorLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
 	}
+
+	//write summary output
+	resultsFile, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData), os.O_CREATE, 666)
+	if err != nil {
+		ErrorLogger.Printf("Unable to create summary output file because of: %q", err)
+	}
+	defer resultsFile.Close()
+
+	tableString := &strings.Builder{}
+	table := tablewriter.NewWriter(tableString)
+	table.SetHeader([]string{"Device", "OS type", "configure", "Command Run Status"})
+
+	for _, d := range devices {
+		table.Append([]string{d.Hostname, d.OsType, strconv.FormatBool(d.Configure), d.State})
+	}
+	table.Render()
+	resultsFile.WriteString(tableString.String())
+	fmt.Println(tableString.String())
+
 	InfoLogger.Printf("Finished! Time taken: %s\n", time.Since(start))
 }
