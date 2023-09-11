@@ -105,10 +105,6 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<
 				row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n==========================================\n",
 					d.Hostname, r.Command, !errFound, commandError)
 			}
-			//} else {
-			//	row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q output:\n%s\n==========================================\n",
-			//		d.Hostname, r.Command, !errFound, commandError, r.Output)
-			//}
 		}
 		writer.WriteString(row)
 	}

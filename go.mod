@@ -1,4 +1,4 @@
-module github.com/bondar-aleksandr/ios-cli-client
+module github.com/bondar-aleksandr/cisco_ssh_client
 
 go 1.20
 

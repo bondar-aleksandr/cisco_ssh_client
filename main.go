@@ -190,8 +190,8 @@ func main() {
 	buildCmdCache(devices)
 
 	// initialize wg to sync goroutines
-	var wg sync.WaitGroup
-	wg.Add(len(devices))
+	var cmdWg sync.WaitGroup
+	cmdWg.Add(len(devices))
 
 	//channel for cli errors notification
 	cliErrChan := make(chan cliError, 100)
@@ -200,21 +200,33 @@ func main() {
 
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &wg, cliErrChan, connErrChan)
+		go runCommands(d, &cmdWg, cliErrChan, connErrChan)
 	}
-	wg.Wait()
+	cmdWg.Wait()
 	close(cliErrChan)
 	close(connErrChan)
 
+	// initialize wg to sync error reading
+	var errWg sync.WaitGroup
+	errWg.Add(2)
+
 	// read connectivity errors from connErrChan
-	for e := range connErrChan {
-		ErrorLogger.Printf("Got general failure, device: %q, error: %q", e.device, e.error)
-	}
+	go func() {
+		defer errWg.Done()
+		for e := range connErrChan {
+			ErrorLogger.Printf("Got general failure, device: %q, error: %q", e.device, e.error)
+		}
+	}()
 
 	// read cli errors from cliErrChan
-	for e := range cliErrChan {
-		ErrorLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
-	}
+	go func() {
+		defer errWg.Done()
+		for e := range cliErrChan {
+			ErrorLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
+		}
+	}()
+
+	errWg.Wait()
 
 	//write summary output
 	resultsFile, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData), os.O_CREATE, 666)
