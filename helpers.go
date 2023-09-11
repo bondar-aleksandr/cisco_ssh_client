@@ -62,7 +62,7 @@ func readConfig(cfg *config) {
 // this func stores commands output to file, config and non-config commands have different output formatting
 func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<- cliError) error {
 
-	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, d.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE, 666)
+	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, d.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		ErrorLogger.Printf("Unable to open output file for device %s because of: %s", d.Hostname, err)
 		return err
