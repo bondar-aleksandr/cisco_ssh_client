@@ -229,7 +229,7 @@ func main() {
 	errWg.Wait()
 
 	//write summary output
-	resultsFile, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData), os.O_CREATE, 666)
+	resultsFile, err := os.Create(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData))
 	if err != nil {
 		ErrorLogger.Printf("Unable to create summary output file because of: %q", err)
 	}
@@ -242,6 +242,7 @@ func main() {
 	for _, d := range devices {
 		table.Append([]string{d.Hostname, d.OsType, strconv.FormatBool(d.Configure), d.State})
 	}
+	table.SetFooter([]string{"", "", "", time.Now().Format(time.RFC822)})
 	table.Render()
 	resultsFile.WriteString(tableString.String())
 	fmt.Println(tableString.String())
