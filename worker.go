@@ -10,7 +10,7 @@ import (
 )
 
 // this func connects to device and issue cli commands
-func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, connErrChan chan<- connError) {
+func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 	defer wg.Done()
 	device, err := netrasp.New(d.Hostname,
@@ -21,7 +21,6 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, conn
 	if err != nil {
 		ErrorLogger.Printf("unable to initialize device: %v\n", err)
 		d.State = Unknown
-		connErrChan <- connError{device: d.Hostname, error: err}
 		return
 	}
 
@@ -32,7 +31,6 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, conn
 			d.State = SshAuthFailure
 		}
 		ErrorLogger.Println(err)
-		connErrChan <- connError{device: d.Hostname, error: err}
 		return
 	}
 	defer device.Close(context.Background())
@@ -46,11 +44,9 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, conn
 		if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
 			ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
 			d.State = CmdPartiallyAccepted
-			connErrChan <- connError{device: d.Hostname, error: err}
 		} else if err != nil {
 			ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
 			d.State = PermissionProblem
-			connErrChan <- connError{device: d.Hostname, error: err}
 		} else if err == nil {
 			d.State = Ok
 			InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
@@ -74,7 +70,6 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, conn
 				ErrorLogger.Printf("unable to run command %s\n", cmd)
 				//TODO: find out in which cases this err may show up
 				d.State = Unknown
-				connErrChan <- connError{device: d.Hostname, error: err}
 				continue
 			}
 			result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})

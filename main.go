@@ -53,12 +53,6 @@ type cliError struct {
 	error  string
 }
 
-// type describes general connectivity errors
-type connError struct {
-	device string
-	error  error
-}
-
 // to describe command run status
 const (
 	Ok                   = "Success"
@@ -103,49 +97,42 @@ func main() {
 	//build command files cache
 	buildCmdCache(devices)
 
-	// initialize wg to sync goroutines
+	// initialize cmdWg to sync worker goroutines
 	var cmdWg sync.WaitGroup
 	cmdWg.Add(len(devices))
 
 	//channel for cli errors notification
 	cliErrChan := make(chan cliError, 100)
-	//channel for general errors notification
-	connErrChan := make(chan connError, len(devices))
 
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &cmdWg, cliErrChan, connErrChan)
+		go runCommands(d, &cmdWg, cliErrChan)
 	}
-	cmdWg.Wait()
-	close(cliErrChan)
-	close(connErrChan)
 
-	// initialize wg to sync error reading
+	// create wg to wait till cliErrChan is drained
 	var errWg sync.WaitGroup
-	errWg.Add(2)
+	errWg.Add(1)
 
-	// read connectivity errors from connErrChan
-	go func() {
-		defer errWg.Done()
-		for e := range connErrChan {
-			ErrorLogger.Printf("Got general failure, device: %q, error: %q", e.device, e.error)
-		}
-	}()
-
-	// read cli errors from cliErrChan
+	//read cli errors from cliErrChan in background
 	go func() {
 		defer errWg.Done()
 		for e := range cliErrChan {
 			ErrorLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
 		}
 	}()
+	// wait till all workers are done
+	cmdWg.Wait()
+	//close channel when all sending to it goroutines exits
+	close(cliErrChan)
 
+	// wait till cliErrChan is drained
 	errWg.Wait()
 
 	//write summary output
+	InfoLogger.Println("Writing app summary output...")
 	resultsFile, err := os.Create(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData))
 	if err != nil {
-		ErrorLogger.Printf("Unable to create summary output file because of: %q", err)
+		ErrorLogger.Printf("Unable to create app summary output file because of: %q", err)
 	}
 	defer resultsFile.Close()
 
@@ -158,7 +145,11 @@ func main() {
 	}
 	table.SetFooter([]string{"", "", "", time.Now().Format(time.RFC822)})
 	table.Render()
-	resultsFile.WriteString(tableString.String())
+	_, err = resultsFile.WriteString(tableString.String())
+	if err != nil {
+		ErrorLogger.Printf("Unable to write app summary because of: %q", err)
+	}
+	InfoLogger.Println("Writing app summary output done")
 	fmt.Println(tableString.String())
 
 	InfoLogger.Printf("Finished! Time taken: %s\n", time.Since(start))
