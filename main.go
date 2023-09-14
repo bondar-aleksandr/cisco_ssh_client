@@ -69,6 +69,7 @@ var configPath = "./config/config.yml"
 var appConfig config
 var (
 	InfoLogger  *log.Logger = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	WarnLogger *log.Logger = log.New(os.Stdout, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger *log.Logger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
@@ -117,7 +118,7 @@ func main() {
 	go func() {
 		defer errWg.Done()
 		for e := range cliErrChan {
-			ErrorLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
+			WarnLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
 		}
 	}()
 	// wait till all workers are done
