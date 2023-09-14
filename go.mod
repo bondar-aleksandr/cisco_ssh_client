@@ -3,11 +3,16 @@ module github.com/bondar-aleksandr/cisco_ssh_client
 go 1.20
 
 require (
-	github.com/bondar-aleksandr/netrasp v0.0.0-20230905092840-3cd3c7f9c9c7 // indirect
-	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d // indirect
-	github.com/mattn/go-runewidth v0.0.9 // indirect
-	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	golang.org/x/crypto v0.12.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/bondar-aleksandr/netrasp v0.0.0-20230914155051-d3b0df50e5a4
+	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
+	github.com/olekukonko/tablewriter v0.0.5
+	gopkg.in/yaml.v3 v3.0.1
 )
+
+require (
+	github.com/mattn/go-runewidth v0.0.9 // indirect
+	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c // indirect
+	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037 // indirect
+)
+
+// replace github.com/bondar-aleksandr/netrasp => d:/dev/go/netrasp

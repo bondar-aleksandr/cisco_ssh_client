@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 	"strings"
 	"sync"
@@ -40,11 +39,7 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 	InfoLogger.Printf("Running commands for device %q...\n", d.Hostname)
 	if d.Configure {
 		res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
-
-		if errors.Is(err, netrasp.IncorrectConfigCommandErr) {
-			ErrorLogger.Printf("Device: %s, one of config commands failed, further commands skipped!\n", d.Hostname)
-			d.State = CmdPartiallyAccepted
-		} else if err != nil {
+		if err != nil {
 			ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
 			d.State = PermissionProblem
 		} else if err == nil {
