@@ -20,7 +20,7 @@ type Device struct {
 	Password  string `csv:"password"`
 	OsType    string `csv:"osType"`
 	Configure bool   `csv:"configure"`
-	CmdFile   string `csv:"CmdFile"`
+	CmdFile   string `csv:"cmdFile"`
 	State     string
 }
 
