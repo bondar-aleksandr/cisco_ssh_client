@@ -62,7 +62,7 @@ const (
 	Unreachable          = "Unreachable"
 	Unknown              = "Unknown"
 	SshAuthFailure       = "SSH authentication failure"
-	PermissionProblem    = "Permission problem"
+	PermissionProblem    = "Permission problem/Canceled"
 	CmdPartiallyAccepted = "Commands accepted with errors"
 )
 
