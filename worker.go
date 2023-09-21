@@ -9,7 +9,7 @@ import (
 )
 
 // this func connects to device and issue cli commands
-func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, ctx context.Context) {
+func runCommands(d *Device, wg *sync.WaitGroup, errChan chan<- devError, ctx context.Context) {
 	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 	defer wg.Done()
 	device, err := netrasp.New(d.Hostname,
@@ -29,7 +29,7 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, ctx 
 		if strings.Contains(err.Error(), "unable to authenticate") {
 			d.State = SshAuthFailure
 		}
-		ErrorLogger.Println(err)
+		WarnLogger.Println(err)
 		return
 	}
 	defer device.Close(ctx)
@@ -47,13 +47,7 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, ctx 
 			InfoLogger.Printf("Configured device %q successfully\n", d.Hostname)
 		}
 		//output analysis
-		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-		err = storeDeviceOutput(&res, d, cliErrChan)
-		if err != nil {
-			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
-		} else {
-			InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
-		}
+		storeDeviceOutput(&res, d, errChan)
 
 	} else {
 		// need to construct the same data type as device.Configure method output uses
@@ -72,12 +66,6 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, ctx 
 		d.State = Ok
 		InfoLogger.Printf("Run commands for %q successfully\n", d.Hostname)
 		//output analysis
-		InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-		err = storeDeviceOutput(&result, d, cliErrChan)
-		if err != nil {
-			ErrorLogger.Printf("Storing device %q data to file failed because of err: %q", d.Hostname, err)
-		} else {
-			InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
-		}
+		storeDeviceOutput(&result, d, errChan)
 	}
 }

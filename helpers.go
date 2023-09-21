@@ -60,7 +60,9 @@ func readConfig(cfg *config) {
 }
 
 // this func stores commands output to file, config and non-config commands have different output formatting
-func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<- cliError) error {
+func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, errChan chan<- devError) {
+	
+	InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
 
 	//create folder for outputs if not exists
 	_, err := os.Stat(filepath.Join(appConfig.Data.OutputFolder))
@@ -68,14 +70,15 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<
 	if os.IsNotExist(err) {
 		errDir := os.MkdirAll(appConfig.Data.OutputFolder, os.ModePerm)
 		if errDir != nil {
-			ErrorLogger.Printf("Unable to create %q directory because of: %q", appConfig.Data.OutputFolder, err)
+			ErrorLogger.Printf("Unable to create %q directory because of: %q\nDevice output will not be stored!", appConfig.Data.OutputFolder, err)
+			return
 		}
 	}
 
 	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, d.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
-		ErrorLogger.Printf("Unable to open output file for device %s because of: %s", d.Hostname, err)
-		return err
+		ErrorLogger.Printf("Unable to open output file for device %s because of: %s\nDevice output will not be stored!", d.Hostname, err)
+		return
 	}
 	defer f.Close()
 	writer := bufio.NewWriter(f)
@@ -101,7 +104,7 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<
 
 		if errFound {
 			d.State = CmdPartiallyAccepted
-			cliErrChan <- cliError{device: d.Hostname, cmd: r.Command, error: commandError}
+			errChan <- devError{device: d.Hostname, cmd: r.Command, msg: commandError}
 		}
 
 		var row string
@@ -121,13 +124,13 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, cliErrChan chan<
 
 	err = writer.Flush()
 	if err != nil {
-		ErrorLogger.Printf("Unable to write output for device %q to file %q\n", d.Hostname, f.Name())
-		return err
+		ErrorLogger.Printf("Unable to write output for device %q to file %q\n because of:%q", d.Hostname, f.Name(), err)
+	} else {
+		InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
 	}
-	return nil
 }
 
-// this func looks for error in CLI output (string started with %s). Returns
+// this func looks for error in CLI output (string started with '%'). Returns
 // string with error and bool if error found
 func detectCliErrors(input string) (string, bool) {
 	rows := strings.Split(input, "\n")

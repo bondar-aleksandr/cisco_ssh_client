@@ -50,10 +50,10 @@ func (c *Commands) Add(cmd string) {
 }
 
 // type describes cli error
-type cliError struct {
+type devError struct {
 	device string
 	cmd    string
-	error  string
+	msg    string
 }
 
 // to describe command run status
@@ -116,11 +116,11 @@ func main() {
 	cmdWg.Add(len(devices))
 
 	//channel for cli errors notification
-	cliErrChan := make(chan cliError, 100)
+	errChan := make(chan devError, 100)
 
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &cmdWg, cliErrChan, ctx)
+		go runCommands(d, &cmdWg, errChan, ctx)
 	}
 
 	// create wg to wait till cliErrChan is drained
@@ -130,14 +130,14 @@ func main() {
 	//read cli errors from cliErrChan in background
 	go func() {
 		defer errWg.Done()
-		for e := range cliErrChan {
-			WarnLogger.Printf("Got command run failure, device: %q, command: %q, error: %q", e.device, e.cmd, e.error)
+		for e := range errChan {
+			WarnLogger.Printf("Got error, device: %q, cmd:%q, error: %q", e.device, e.cmd, e.msg)
 		}
 	}()
 	// wait till all workers are done
 	cmdWg.Wait()
 	//close channel when all sending to it goroutines exits
-	close(cliErrChan)
+	close(errChan)
 
 	// wait till cliErrChan is drained
 	errWg.Wait()
