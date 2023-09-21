@@ -9,7 +9,7 @@ import (
 )
 
 // this func connects to device and issue cli commands
-func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
+func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError, ctx context.Context) {
 	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 	defer wg.Done()
 	device, err := netrasp.New(d.Hostname,
@@ -23,7 +23,7 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 		return
 	}
 
-	err = device.Dial(context.Background())
+	err = device.Dial(ctx)
 	if err != nil {
 		d.State = Unreachable
 		if strings.Contains(err.Error(), "unable to authenticate") {
@@ -32,13 +32,13 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 		ErrorLogger.Println(err)
 		return
 	}
-	defer device.Close(context.Background())
+	defer device.Close(ctx)
 	InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
 
 	// switch between config/show commands
 	InfoLogger.Printf("Running commands for device %q...\n", d.Hostname)
 	if d.Configure {
-		res, err := device.Configure(context.Background(), cmdCache[d.CmdFile].Commands)
+		res, err := device.Configure(ctx, cmdCache[d.CmdFile].Commands)
 		if err != nil {
 			ErrorLogger.Printf("unable to configure device %s: %v", d.Hostname, err)
 			d.State = PermissionProblem
@@ -60,7 +60,7 @@ func runCommands(d *Device, wg *sync.WaitGroup, cliErrChan chan<- cliError) {
 		// in order to use the same "storeDeviceOutput" processing function further
 		var result netrasp.ConfigResult
 		for _, cmd := range cmdCache[d.CmdFile].Commands {
-			res, err := device.Run(context.Background(), cmd)
+			res, err := device.Run(ctx, cmd)
 			if err != nil {
 				ErrorLogger.Printf("unable to run command %s\n", cmd)
 				//TODO: find out in which cases this err may show up

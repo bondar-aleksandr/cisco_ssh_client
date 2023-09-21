@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/gocarina/gocsv"
 	"github.com/olekukonko/tablewriter"
@@ -79,12 +80,14 @@ func main() {
 	start := time.Now()
 	InfoLogger.Println("Starting...")
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		s := <-quit
-		ErrorLogger.Printf("Caught signal: %q", s.String())
-		os.Exit(0)
+		ErrorLogger.Printf("Caught signal: %q, exiting...", s.String())
+		cancel()
 	}()
 
 	// read app config
@@ -117,7 +120,7 @@ func main() {
 
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &cmdWg, cliErrChan)
+		go runCommands(d, &cmdWg, cliErrChan, ctx)
 	}
 
 	// create wg to wait till cliErrChan is drained
