@@ -6,10 +6,12 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -76,6 +78,14 @@ var (
 func main() {
 	start := time.Now()
 	InfoLogger.Println("Starting...")
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		s := <-quit
+		ErrorLogger.Printf("Caught signal: %q", s.String())
+		os.Exit(0)
+	}()
 
 	// read app config
 	readConfig(&appConfig)
