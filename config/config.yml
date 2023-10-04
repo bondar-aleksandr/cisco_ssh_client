@@ -1,5 +1,7 @@
 client:
   ssh_timeout: 2  #seconds
+  legacy_key_exchange: "diffie-hellman-group1-sha1"
+  legacy_algorithm: "aes128-cbc"
 data:
   input_folder: "./input/"
   devices_data: "devices.csv"

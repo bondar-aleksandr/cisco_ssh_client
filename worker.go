@@ -2,21 +2,41 @@ package main
 
 import (
 	"context"
-	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 )
 
 // this func connects to device and issue cli commands
-func runCommands(d *Device, wg *sync.WaitGroup, errChan chan<- devError, ctx context.Context) {
+func runCommands(ctx context.Context, d *Device, wg *sync.WaitGroup, errChan chan<- devError) {
 	InfoLogger.Printf("Connecting to device %s...\n", d.Hostname)
 	defer wg.Done()
+
+	//check whether it's recursive call or not
+	var legacyDevice bool
+	switch ctx.Value("legacyDevice") {
+	case nil:
+		legacyDevice = false
+	default :
+		legacyDevice = true
+	}
+	
 	device, err := netrasp.New(d.Hostname,
 		netrasp.WithUsernamePassword(d.Login, d.Password),
 		netrasp.WithDriver(d.OsType), netrasp.WithInsecureIgnoreHostKey(),
 		netrasp.WithDialTimeout(time.Duration(appConfig.Client.SSHTimeout)*time.Second),
 	)
+	if legacyDevice {
+		device, err = netrasp.New(d.Hostname,
+			netrasp.WithUsernamePassword(d.Login, d.Password),
+			netrasp.WithDriver(d.OsType), netrasp.WithInsecureIgnoreHostKey(),
+			netrasp.WithDialTimeout(time.Duration(appConfig.Client.SSHTimeout)*time.Second),
+			netrasp.WithSSHKeyExchange(appConfig.Client.LegacyKeyExchange),
+			netrasp.WithSSHCipher(appConfig.Client.LegacyAlgorithm),
+		)
+	} 
 	if err != nil {
 		ErrorLogger.Printf("unable to initialize device: %v\n", err)
 		d.State = Unknown
@@ -26,12 +46,30 @@ func runCommands(d *Device, wg *sync.WaitGroup, errChan chan<- devError, ctx con
 	err = device.Dial(ctx)
 	if err != nil {
 		d.State = Unreachable
-		if strings.Contains(err.Error(), "unable to authenticate") {
+		switch {
+		// recursive call to "runCommands" in case of ssh ciphers mismatch
+		case strings.Contains(err.Error(), "no common algorithm for key exchange") && !legacyDevice:
+			WarnLogger.Printf("Need to lower SSH ciphers for the device %s, retrying...", d.Hostname)
+			// put exit criteria to ctx
+			ctx := context.WithValue(ctx, "legacyDevice", true)
+			wg.Add(1)
+			runCommands(ctx, d, wg, errChan)
+			return
+		// case for the same error even after recursive call
+		case strings.Contains(err.Error(), "no common algorithm for key exchange"):
+			WarnLogger.Printf("Need to change legacy SSH ciphers in config.yml!")
+			WarnLogger.Printf("unable to connect to device %s, err: %v", d.Hostname, err)
+			return
+		case strings.Contains(err.Error(), "unable to authenticate"):
 			d.State = SshAuthFailure
+			WarnLogger.Printf("unable to authenticate to device %s, error:%v", d.Hostname, err)
+			return
+		default:
+			WarnLogger.Printf("unable to connect to device %s, err: %v", d.Hostname, err)
+			return
 		}
-		WarnLogger.Println(err)
-		return
 	}
+
 	defer device.Close(ctx)
 	InfoLogger.Printf("Connected to device %s successfully\n", d.Hostname)
 

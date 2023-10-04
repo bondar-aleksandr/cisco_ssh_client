@@ -31,6 +31,8 @@ type Device struct {
 type config struct {
 	Client struct {
 		SSHTimeout int64 `yaml:"ssh_timeout"`
+		LegacyKeyExchange string `yaml:"legacy_key_exchange"`
+		LegacyAlgorithm string `yaml:"legacy_algorithm"`
 	}
 	Data struct {
 		InputFolder  string `yaml:"input_folder"`
@@ -80,6 +82,7 @@ func main() {
 	start := time.Now()
 	InfoLogger.Println("Starting...")
 
+	//graceful shutdown setup
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -120,7 +123,7 @@ func main() {
 
 	// looping over devices
 	for _, d := range devices {
-		go runCommands(d, &cmdWg, errChan, ctx)
+		go runCommands(ctx, d, &cmdWg, errChan)
 	}
 
 	// create wg to wait till cliErrChan is drained
