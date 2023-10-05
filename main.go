@@ -147,7 +147,7 @@ func main() {
 
 	//write summary output
 	InfoLogger.Println("Writing app summary output...")
-	resultsFile, err := os.Create(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData))
+	resultsFile, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		ErrorLogger.Printf("Unable to create app summary output file because of: %q", err)
 	}
