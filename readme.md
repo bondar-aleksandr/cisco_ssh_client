@@ -27,7 +27,7 @@ Typical folder structure for app to run is below
 ```
 App reads config file from ./config/config.yml file, finds there input data (devices parameters, files with commands, etc.), 
 runs the commands specified, and puts output from each device to corresponding file located in "output" directory. Finally, it stores the summary
-status to "output/results.txt"
+status to "output/results.txt". If app is unable to open SSH with system-defined ciphers, it will automatically fallback to ciphers specified as "legacy" in config.yml
 
 ### Input data format
 ___
@@ -36,6 +36,8 @@ ___
 | Option | Description |
 | ------ | ----------- |
 | client, ssh_timeout   | SSH timeout value (in seconds), used for all devices |
+| client, legacy_key_exchange   | SSH key exchange algorithm in case when device's ciphers are below OS default ciphers. Used only when SSH connection with system-defined ciphers is not possible |
+| client, legacy_algorithm  | SSH encryption algorithm in case when device's ciphers are below OS default ciphers. Used only when SSH connection with system-defined ciphers is not possible  |
 | data, input_folder | Directory where devices info and command files are located |
 | data, devices_data | Filename for csv-formatted devices file (must be inside "intput_folder" directory) |
 | data, output_folder | Directory where outputs are stored |
@@ -45,6 +47,8 @@ config.yml example:
 ```yaml
 client:
   ssh_timeout: 2
+  legacy_key_exchange: "diffie-hellman-group1-sha1"
+  legacy_algorithm: "aes128-cbc"
 data:
   input_folder: "./input/"
   devices_data: "devices.csv"
