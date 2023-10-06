@@ -96,6 +96,12 @@ func main() {
 	// read app config
 	readConfig(&appConfig)
 
+	//create "output" directory
+	err := prepareDirectory()
+	if err != nil {
+		ErrorLogger.Fatalf("Cannot create directory for outputs because of: %q, exiting...", err)
+	}
+
 	//Parse CSV with devices info to memory
 	InfoLogger.Println("Decoding devices data...")
 	deviceFile, err := os.Open(filepath.Join(appConfig.Data.InputFolder, appConfig.Data.DevicesData))
@@ -147,7 +153,7 @@ func main() {
 
 	//write summary output
 	InfoLogger.Println("Writing app summary output...")
-	resultsFile, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
+	resultsFile, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, appConfig.Data.ResultsData), os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		ErrorLogger.Printf("Unable to create app summary output file because of: %q", err)
 	}

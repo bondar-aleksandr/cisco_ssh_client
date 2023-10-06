@@ -64,17 +64,6 @@ func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, errChan chan<- d
 	
 	InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
 
-	//create folder for outputs if not exists
-	_, err := os.Stat(filepath.Join(appConfig.Data.OutputFolder))
-
-	if os.IsNotExist(err) {
-		errDir := os.MkdirAll(appConfig.Data.OutputFolder, os.ModePerm)
-		if errDir != nil {
-			ErrorLogger.Printf("Unable to create %q directory because of: %q\nDevice output will not be stored!", appConfig.Data.OutputFolder, err)
-			return
-		}
-	}
-
 	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, d.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		ErrorLogger.Printf("Unable to open output file for device %s because of: %s\nDevice output will not be stored!", d.Hostname, err)
@@ -144,4 +133,24 @@ func detectCliErrors(input string) (string, bool) {
 		}
 	}
 	return cliErr, errFound
+}
+
+// this func creates directory for storing outputs if it doesn't exists before
+func prepareDirectory() error {
+	//create folder for outputs if not exists
+	InfoLogger.Println("Creating output directory is not exists...")
+	outDir := filepath.Join(appConfig.Data.OutputFolder)
+	_, err := os.Stat(outDir)
+
+	if os.IsNotExist(err) {
+		errDir := os.MkdirAll(appConfig.Data.OutputFolder, os.ModePerm)
+		if errDir != nil {
+			return err
+		}
+		InfoLogger.Printf("Created output directory %q successfully", outDir)
+	} else {
+		InfoLogger.Println("Output directory already there")
+	}
+
+	return nil
 }
