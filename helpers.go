@@ -51,6 +51,7 @@ func readConfig(cfg *config) {
 	defer f.Close()
 
 	decoder := yaml.NewDecoder(f)
+	decoder.KnownFields(true)
 	err = decoder.Decode(cfg)
 	if err != nil {
 		ErrorLogger.Fatalf("Cannot parse app config file because of: %s", err)

@@ -48,7 +48,7 @@ func runCommands(ctx context.Context, d *Device, wg *sync.WaitGroup, errChan cha
 		d.State = Unreachable
 		switch {
 		// recursive call to "runCommands" in case of ssh ciphers mismatch
-		case strings.Contains(err.Error(), "no common algorithm for key exchange") && !legacyDevice:
+		case strings.Contains(err.Error(), "no common algorithm") && !legacyDevice:
 			WarnLogger.Printf("Need to lower SSH ciphers for the device %s, retrying...", d.Hostname)
 			// put exit criteria to ctx
 			ctx := context.WithValue(ctx, "legacyDevice", true)
@@ -56,7 +56,7 @@ func runCommands(ctx context.Context, d *Device, wg *sync.WaitGroup, errChan cha
 			runCommands(ctx, d, wg, errChan)
 			return
 		// case for the same error even after recursive call
-		case strings.Contains(err.Error(), "no common algorithm for key exchange"):
+		case strings.Contains(err.Error(), "no common algorithm"):
 			WarnLogger.Printf("Need to change legacy SSH ciphers in config.yml!")
 			WarnLogger.Printf("unable to connect to device %s, err: %v", d.Hostname, err)
 			return
