@@ -99,12 +99,12 @@ func main() {
 
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-	table.SetHeader([]string{"Device", "OS type", "configure", "config saved", "Command Run Status"})
+	table.SetHeader([]string{"Device", "OS type", "configure", "Command Run Status"})
 
 	for _, d := range devices {
-		table.Append([]string{d.Hostname, d.OsType, strconv.FormatBool(d.Configure), strconv.FormatBool(d.SaveConfig), d.State})
+		table.Append([]string{d.Hostname, d.OsType, strconv.FormatBool(d.Configure), d.State})
 	}
-	table.SetFooter([]string{"", "", "", "", time.Now().Format(time.RFC822)})
+	table.SetFooter([]string{"", "", "", time.Now().Format(time.RFC822)})
 	table.Render()
 	_, err = resultsFile.WriteString(tableString.String())
 	if err != nil {

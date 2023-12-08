@@ -125,16 +125,6 @@ func(w *worker) runCommands(ctx context.Context) (*netrasp.ConfigResult, error) 
 		InfoLogger.Printf("Sent commands to device %q successfully\n", w.device.Hostname)
 		return &res, nil
 
-		// if d.SaveConfig {
-		// 	_, err := device.Run(ctx, d.GetSaveCommand())
-		// 	if err != nil {
-		// 		d.State = SaveFailed
-		// 		ErrorLogger.Printf("Unable to save config for device %s: %v", d.Hostname, err)
-		// 	} else if err == nil {
-		// 		InfoLogger.Printf("Saved config for device %q successfully\n", d.Hostname)
-		// 	}
-		// }
-
 	} else {
 		// need to construct the same data type as device.Configure method output uses
 		// in order to use the same "storeDeviceOutput" processing function further
@@ -151,20 +141,10 @@ func(w *worker) runCommands(ctx context.Context) (*netrasp.ConfigResult, error) 
 		}
 		InfoLogger.Printf("Sent commands to device %q successfully\n", w.device.Hostname)
 		return &result, nil
-
-		// if d.SaveConfig {
-		// 	_, err := device.Run(ctx, d.GetSaveCommand())
-		// 	if err != nil {
-		// 		d.State = SaveFailed
-		// 		ErrorLogger.Printf("Unable to save config for device %s: %v", d.Hostname, err)
-		// 	} else if err == nil {
-		// 		InfoLogger.Printf("Saved config for device %q successfully\n", d.Hostname)
-		// 	}
-		// }
 	}
 }
 
-
+// processes output from CLI commands, returns channel with formatted (for persistance) data and channel with errors
 func(w *worker) processOutput(inData *netrasp.ConfigResult) (chan string, chan devError) {
 	errChan := make(chan devError, 10)
 	dataChan := make(chan string)

@@ -15,18 +15,6 @@ type Device struct {
 	State     string
 }
 
-// returns CLI command for saving configuration, platform dependend
-func(d *Device) GetSaveCommand() (string) {
-	var cmd string
-	switch d.OsType {
-	case "ios":
-		cmd = "wr mem"
-	case "nxos":
-		cmd = "copy run start"
-	}
-	return cmd
-}
-
 // type for app-level config
 type config struct {
 	Client struct  {
