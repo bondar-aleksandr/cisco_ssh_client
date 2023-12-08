@@ -16,48 +16,6 @@ import (
 	"time"
 )
 
-// describes entry in csv device file
-type Device struct {
-	Hostname  string `csv:"hostname"`
-	Login     string `csv:"login"`
-	Password  string `csv:"password"`
-	OsType    string `csv:"osType"`
-	Configure bool   `csv:"configure"`
-	CmdFile   string `csv:"cmdFile"`
-	State     string
-}
-
-// type for app-level config
-type config struct {
-	Client struct {
-		SSHTimeout int64 `yaml:"ssh_timeout"`
-		LegacyKeyExchange string `yaml:"legacy_key_exchange"`
-		LegacyAlgorithm string `yaml:"legacy_algorithm"`
-	}
-	Data struct {
-		InputFolder  string `yaml:"input_folder"`
-		DevicesData  string `yaml:"devices_data"`
-		OutputFolder string `yaml:"output_folder"`
-		ResultsData  string `yaml:"results_data"`
-	}
-}
-
-// type used for storing all commands from single command file
-type Commands struct {
-	Commands []string
-}
-
-func (c *Commands) Add(cmd string) {
-	c.Commands = append(c.Commands, cmd)
-}
-
-// type describes cli error
-type devError struct {
-	device string
-	cmd    string
-	msg    string
-}
-
 // to describe command run status
 const (
 	Ok                   = "Success"
@@ -66,6 +24,7 @@ const (
 	SshAuthFailure       = "SSH authentication failure"
 	PermissionProblem    = "Permission problem/Canceled"
 	CmdPartiallyAccepted = "Commands accepted with errors"
+	SaveFailed			 = "Commands accepted, save config failed"
 )
 
 // stores mapping between command file and its content, only unique entries present
@@ -124,32 +83,11 @@ func main() {
 	var cmdWg sync.WaitGroup
 	cmdWg.Add(len(devices))
 
-	//channel for cli errors notification
-	errChan := make(chan devError, 100)
-
-	// looping over devices
 	for _, d := range devices {
-		go runCommands(ctx, d, &cmdWg, errChan)
+		w := NewWorker(ctx, d, &cmdWg)
+		go w.Run()
 	}
-
-	// create wg to wait till cliErrChan is drained
-	var errWg sync.WaitGroup
-	errWg.Add(1)
-
-	//read cli errors from cliErrChan in background
-	go func() {
-		defer errWg.Done()
-		for e := range errChan {
-			WarnLogger.Printf("Got error, device: %q, cmd:%q, error: %q", e.device, e.cmd, e.msg)
-		}
-	}()
-	// wait till all workers are done
 	cmdWg.Wait()
-	//close channel when all sending to it goroutines exits
-	close(errChan)
-
-	// wait till cliErrChan is drained
-	errWg.Wait()
 
 	//write summary output
 	InfoLogger.Println("Writing app summary output...")
@@ -161,12 +99,12 @@ func main() {
 
 	tableString := &strings.Builder{}
 	table := tablewriter.NewWriter(tableString)
-	table.SetHeader([]string{"Device", "OS type", "configure", "Command Run Status"})
+	table.SetHeader([]string{"Device", "OS type", "configure", "config saved", "Command Run Status"})
 
 	for _, d := range devices {
-		table.Append([]string{d.Hostname, d.OsType, strconv.FormatBool(d.Configure), d.State})
+		table.Append([]string{d.Hostname, d.OsType, strconv.FormatBool(d.Configure), strconv.FormatBool(d.SaveConfig), d.State})
 	}
-	table.SetFooter([]string{"", "", "", time.Now().Format(time.RFC822)})
+	table.SetFooter([]string{"", "", "", "", time.Now().Format(time.RFC822)})
 	table.Render()
 	_, err = resultsFile.WriteString(tableString.String())
 	if err != nil {

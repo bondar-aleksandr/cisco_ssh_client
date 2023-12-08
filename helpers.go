@@ -2,13 +2,10 @@ package main
 
 import (
 	"bufio"
-	"fmt"
-	"github.com/bondar-aleksandr/netrasp/pkg/netrasp"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // func receives list of Devices, walk through it, finds unique filenames, and populates
@@ -60,65 +57,6 @@ func readConfig(cfg *config) {
 	//TODO: print config parameters
 }
 
-// this func stores commands output to file, config and non-config commands have different output formatting
-func storeDeviceOutput(inData *netrasp.ConfigResult, d *Device, errChan chan<- devError) {
-	
-	InfoLogger.Printf("Storing device %q data to file...", d.Hostname)
-
-	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, d.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
-	if err != nil {
-		ErrorLogger.Printf("Unable to open output file for device %s because of: %s\nDevice output will not be stored!", d.Hostname, err)
-		return
-	}
-	defer f.Close()
-	writer := bufio.NewWriter(f)
-	writer.WriteString(fmt.Sprintf("======================== %q =======================\n", time.Now().Format(time.RFC822)))
-
-	for _, r := range inData.ConfigCommands {
-		var commandError string
-		var errFound bool
-
-		if d.Configure {
-			commandError, errFound = detectCliErrors(r.Output)
-		} else {
-			// need to trim output to up to first 3 lines, because error message contained there
-			linesCount := len(strings.Split(r.Output, "\n"))
-			var linesToSlice = 3
-			if linesCount < 3 {
-				// some errors output are just one line
-				linesToSlice = 1
-			}
-			partialOutput := strings.Join(strings.Split(r.Output, "\n")[:linesToSlice], "\n")
-			commandError, errFound = detectCliErrors(partialOutput)
-		}
-
-		if errFound {
-			d.State = CmdPartiallyAccepted
-			errChan <- devError{device: d.Hostname, cmd: r.Command, msg: commandError}
-		}
-
-		var row string
-		if d.Configure {
-			row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n",
-				d.Hostname, r.Command, !errFound, commandError)
-		} else {
-			row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q output:\n%s\n==========================================\n",
-				d.Hostname, r.Command, !errFound, commandError, r.Output)
-			if errFound {
-				row = fmt.Sprintf("device: %q, command: %q, accepted: %t, error: %q\n==========================================\n",
-					d.Hostname, r.Command, !errFound, commandError)
-			}
-		}
-		writer.WriteString(row)
-	}
-
-	err = writer.Flush()
-	if err != nil {
-		ErrorLogger.Printf("Unable to write output for device %q to file %q\n because of:%q", d.Hostname, f.Name(), err)
-	} else {
-		InfoLogger.Printf("Stored device %q data to file successfully\n", d.Hostname)
-	}
-}
 
 // this func looks for error in CLI output (string started with '%'). Returns
 // string with error and bool if error found
@@ -127,7 +65,7 @@ func detectCliErrors(input string) (string, bool) {
 	var cliErr string
 	var errFound bool
 	for _, r := range rows {
-		if strings.HasPrefix(r, "%") {
+		if strings.HasPrefix(r, "%") || strings.HasPrefix(r, "Command rejected:") {
 			cliErr = r
 			errFound = true
 			break
@@ -152,6 +90,5 @@ func prepareDirectory() error {
 	} else {
 		InfoLogger.Println("Output directory already there")
 	}
-
 	return nil
 }

@@ -6,4 +6,4 @@
 *.pdf
 .idea
 .vscode
-test_data/
+/bin
