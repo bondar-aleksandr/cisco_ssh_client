@@ -58,7 +58,7 @@ func readConfig(cfg *config) {
 }
 
 
-// this func looks for error in CLI output (string started with '%'). Returns
+// this func looks for error in CLI output. Returns
 // string with error and bool if error found
 func detectCliErrors(input string) (string, bool) {
 	rows := strings.Split(input, "\n")

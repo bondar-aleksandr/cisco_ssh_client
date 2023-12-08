@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 )
 
+// type describes worker, which is responsible for gathering data from device, processing, and storing the data
 type worker struct {
 	device *Device
 	globalWg *sync.WaitGroup
@@ -19,7 +20,7 @@ type worker struct {
 	ctx context.Context
 }
 
-// constructor
+// constructor for worker
 func NewWorker(ctx context.Context, d *Device, wg *sync.WaitGroup) *worker {
 	return &worker{
 		ctx: ctx,
@@ -29,6 +30,7 @@ func NewWorker(ctx context.Context, d *Device, wg *sync.WaitGroup) *worker {
 	}
 }
 
+// main process for worker
 func(w *worker) Run() {
 	defer w.globalWg.Done()
 
