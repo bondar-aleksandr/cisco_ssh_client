@@ -6,17 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"github.com/bondar-aleksandr/cisco_ssh_client/logger"
 )
 
 // func receives list of Devices, walk through it, finds unique filenames, and populates
 // cmdCache variable with mapping filename:Commands
 func buildCmdCache(entries []*Device) {
-	InfoLogger.Println("Building cmd cache...")
+	logger.L.Info("Building cmd cache...")
 
 	for _, entry := range entries {
 		commandsFile, err := os.Open(filepath.Join(appConfig.Data.InputFolder, entry.CmdFile))
 		if err != nil {
-			ErrorLogger.Fatalf("Unable to open commands file: %s", entry.CmdFile)
+			logger.L.Error("Unable to open commands file", "file", entry.CmdFile)
+			os.Exit(1)
 		}
 		defer commandsFile.Close()
 
@@ -34,16 +36,17 @@ func buildCmdCache(entries []*Device) {
 		// add data to cache
 		cmdCache[entry.CmdFile] = &commands
 	}
-	InfoLogger.Println("Building cmd cache done")
+	logger.L.Info("Building cmd cache done")
 }
 
 // this func Unmarshals config.yml content to config variable
 func readConfig(cfg *config) {
-	InfoLogger.Println("Reading config...")
+	logger.L.Info("Reading config...")
 
 	f, err := os.Open(configPath)
 	if err != nil {
-		ErrorLogger.Fatalf("Cannot read app config file because of: %s", err)
+		logger.L.Error("Cannot read app config file", "error", err.Error())
+		os.Exit(1)
 	}
 	defer f.Close()
 
@@ -51,9 +54,10 @@ func readConfig(cfg *config) {
 	decoder.KnownFields(true)
 	err = decoder.Decode(cfg)
 	if err != nil {
-		ErrorLogger.Fatalf("Cannot parse app config file because of: %s", err)
+		logger.L.Error("Cannot parse app config file", "error", err.Error())
+		os.Exit(1)
 	}
-	InfoLogger.Println("Reading config done")
+	logger.L.Info("Reading config done")
 	//TODO: print config parameters
 }
 
@@ -77,7 +81,7 @@ func detectCliErrors(input string) (string, bool) {
 // this func creates directory for storing outputs if it doesn't exists before
 func prepareDirectory() error {
 	//create folder for outputs if not exists
-	InfoLogger.Println("Creating output directory is not exists...")
+	logger.L.Info("Creating output directory is not exists...")
 	outDir := filepath.Join(appConfig.Data.OutputFolder)
 	_, err := os.Stat(outDir)
 
@@ -86,9 +90,9 @@ func prepareDirectory() error {
 		if errDir != nil {
 			return err
 		}
-		InfoLogger.Printf("Created output directory %q successfully", outDir)
+		logger.L.Info("Created output directory successfully", "directory", outDir)
 	} else {
-		InfoLogger.Println("Output directory already there")
+		logger.L.Info("Output directory already there")
 	}
 	return nil
 }

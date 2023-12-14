@@ -11,6 +11,8 @@ require (
 
 require (
 	github.com/mattn/go-runewidth v0.0.9 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
+	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c // indirect
 	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037 // indirect
 )

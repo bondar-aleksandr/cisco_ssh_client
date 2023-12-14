@@ -10,6 +10,8 @@ import (
 	"os"
 	"bufio"
 	"path/filepath"
+	"github.com/bondar-aleksandr/cisco_ssh_client/logger"
+	"log/slog"
 )
 
 // type describes worker, which is responsible for gathering data from device, processing, and storing the data
@@ -18,6 +20,7 @@ type worker struct {
 	globalWg *sync.WaitGroup
 	localWg *sync.WaitGroup
 	ctx context.Context
+	logger *slog.Logger
 }
 
 // constructor for worker
@@ -27,6 +30,7 @@ func NewWorker(ctx context.Context, d *Device, wg *sync.WaitGroup) *worker {
 		device: d,
 		globalWg: wg,
 		localWg: &sync.WaitGroup{},
+		logger: logger.L.With("device", d.Hostname),
 	}
 }
 
@@ -46,7 +50,7 @@ func(w *worker) Run() {
 	go func() {
 		defer w.localWg.Done()
 		for e := range errChan {
-			WarnLogger.Printf("Got error, device: %q, cmd:%q, error: %q", e.device, e.cmd, e.msg)
+			w.logger.Warn("Got error", "command", e.cmd, "error", e.msg)
 		}
 	}()
 	go w.storeOutput(dataChan)
@@ -55,7 +59,7 @@ func(w *worker) Run() {
 
 // this func connects to device and issue cli commands
 func(w *worker) runCommands(ctx context.Context) (*netrasp.ConfigResult, error) {
-	InfoLogger.Printf("Connecting to device %s...\n", w.device.Hostname)
+	w.logger.Info("Connecting to device...")
 	defer w.localWg.Done()
 
 	//check whether it's recursive call or not
@@ -82,7 +86,7 @@ func(w *worker) runCommands(ctx context.Context) (*netrasp.ConfigResult, error) 
 		)
 	} 
 	if err != nil {
-		ErrorLogger.Printf("unable to initialize device: %v\n", err)
+		w.logger.Error("unable to initialize device", "error", err.Error())
 		w.device.State = Unknown
 		return nil, err
 	}
@@ -93,38 +97,38 @@ func(w *worker) runCommands(ctx context.Context) (*netrasp.ConfigResult, error) 
 		switch {
 		// recursive call to "runCommands" in case of ssh ciphers mismatch
 		case strings.Contains(err.Error(), "no common algorithm") && !legacyDevice:
-			WarnLogger.Printf("Need to lower SSH ciphers for the device %s, retrying...", w.device.Hostname)
+			w.logger.Warn("Need to lower SSH ciphers for the device, retrying...")
 			// put exit criteria to ctx
 			ctx := context.WithValue(ctx, "legacyDevice", true)
 			w.localWg.Add(1)
 			return w.runCommands(ctx)
 		// case for the same error even after recursive call
 		case strings.Contains(err.Error(), "no common algorithm"):
-			WarnLogger.Printf("Need to change legacy SSH ciphers in config.yml!")
-			WarnLogger.Printf("unable to connect to device %s, err: %v", w.device.Hostname, err)
+			logger.L.Warn("Need to change legacy SSH ciphers in config.yml!")
+			w.logger.Warn("unable to connect to device", "error", err.Error())
 			return nil, err
 		case strings.Contains(err.Error(), "unable to authenticate"):
 			w.device.State = SshAuthFailure
-			WarnLogger.Printf("unable to authenticate to device %s, error:%v", w.device.Hostname, err)
+			w.logger.Warn("unable to authenticate to device", "error", err.Error())
 			return nil, err
 		default:
-			WarnLogger.Printf("unable to connect to device %s, err: %v", w.device.Hostname, err)
+			w.logger.Warn("unable to connect to device", "error", err.Error())
 			return nil, err
 		}
 	}
 	defer device.Close(ctx)
-	InfoLogger.Printf("Connected to device %s successfully\n", w.device.Hostname)
+	w.logger.Info("Connected to device successfully")
 
 	// switch between config/show commands
-	InfoLogger.Printf("Running commands for device %q...\n", w.device.Hostname)
+	w.logger.Info("Running commands for device...")
 	if w.device.Configure {
 		res, err := device.Configure(ctx, cmdCache[w.device.CmdFile].Commands)
 		if err != nil {
-			ErrorLogger.Printf("Unable to configure device %s: %v", w.device.Hostname, err)
+			w.logger.Error("Unable to configure device", "error", err.Error())
 			w.device.State = PermissionProblem
 			return nil, err
 		}
-		InfoLogger.Printf("Sent commands to device %q successfully\n", w.device.Hostname)
+		w.logger.Info("Sent commands to device successfully")
 		return &res, nil
 
 	} else {
@@ -134,14 +138,14 @@ func(w *worker) runCommands(ctx context.Context) (*netrasp.ConfigResult, error) 
 		for _, cmd := range cmdCache[w.device.CmdFile].Commands {
 			res, err := device.Run(ctx, cmd)
 			if err != nil {
-				ErrorLogger.Printf("unable to run command %s\n", cmd)
+				w.logger.Error("unable to run command", "command", cmd)
 				//TODO: find out in which cases this err may show up
 				w.device.State = Unknown
 				continue
 			}
 			result.ConfigCommands = append(result.ConfigCommands, netrasp.ConfigCommand{Command: cmd, Output: res})
 		}
-		InfoLogger.Printf("Sent commands to device %q successfully\n", w.device.Hostname)
+		w.logger.Info("Sent commands to device successfully")
 		return &result, nil
 	}
 }
@@ -206,11 +210,11 @@ func(w *worker) processOutput(inData *netrasp.ConfigResult) (chan string, chan d
 // this func stores commands output to file, config and non-config commands have different output formatting
 func(w *worker) storeOutput(inData chan string) {
 	defer w.localWg.Done()
-	InfoLogger.Printf("Storing device %q data to file...", w.device.Hostname)
+	w.logger.Info("Storing device data to file...")
 
 	f, err := os.OpenFile(filepath.Join(appConfig.Data.OutputFolder, w.device.Hostname+"_commandStatus.txt"), os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
-		ErrorLogger.Printf("Unable to open output file for device %s because of: %s\nDevice output will not be stored!", w.device.Hostname, err)
+		w.logger.Error("Unable to open output file for device. Device output will not be stored!", "error", err)
 		return
 	}
 	defer f.Close()
@@ -223,8 +227,8 @@ func(w *worker) storeOutput(inData chan string) {
 
 	err = writer.Flush()
 	if err != nil {
-		ErrorLogger.Printf("Unable to write output for device %q to file %q\n because of:%q", w.device.Hostname, f.Name(), err)
+		w.logger.Error("Unable to write output for device to file", "file", f.Name(), "error", err)
 	} else {
-		InfoLogger.Printf("Stored device %q data to file successfully\n", w.device.Hostname)
+		w.logger.Info("Stored device data to file successfully")
 	}
 }
