@@ -7,3 +7,9 @@ data:
   devices_data: "devices.csv"
   output_folder: "./output/"
   results_data: "results.txt"
+logger:
+  level: 0     # -1:debug, 0:info, 1:warm, 2:err
+  encoding: "console"  # possible values are: json, console
+  outputPath: 
+    - "stderr"
+    - "app.log"
