@@ -17,16 +17,21 @@ type App struct {
 	Config *config
 }
 
-func NewApp(cfgPath string) *App {
+func NewApp(cfgPath string) (*App, error) {
 	app := &App{
 		CmdCache: make(map[string]*Commands),
 		ConfigPath: cfgPath,
 	}
-	// app.getLogger()
 	app.Logger = logger.InitLogger(cfgPath)
-	app.readConfig()
-	app.prepareDirectory()
-	return app
+	err := app.readConfig()
+	if err != nil {
+		return nil, err
+	}
+	err = app.prepareDirectory()
+	if err != nil {
+		return nil, err
+	}
+	return app, nil
 }
 
 // type used for storing all commands from single command file
@@ -54,13 +59,13 @@ type config struct {
 }
 
 // this func Unmarshals config.yml content to config variable
-func(a *App) readConfig() {
+func(a *App) readConfig() error {
 	a.Logger.Info("Reading config...")
 
 	f, err := os.Open(a.ConfigPath)
 	if err != nil {
 		a.Logger.Errorf("Cannot read app config file because of: %s", err)
-		os.Exit(1)
+		return err
 	}
 	defer f.Close()
 
@@ -71,11 +76,12 @@ func(a *App) readConfig() {
 	err = decoder.Decode(cfg)
 	if err != nil {
 		a.Logger.Errorf("Cannot parse app config file because of: %s", err)
-		os.Exit(1)
+		return err
 	}
 	a.Config = cfg
 	a.Logger.Info("Reading config done")
 	//TODO: print config parameters
+	return nil
 }
 
 // func receives list of Devices, walk through it, finds unique filenames, and populates
@@ -109,7 +115,7 @@ func(a *App) BuildCmdCache(entries []*device.Device) {
 }
 
 // this func creates directory for storing outputs if it doesn't exists before
-func(a *App) prepareDirectory() {
+func(a *App) prepareDirectory() error {
 	//create folder for outputs if not exists
 	a.Logger.Info("Creating output directory is not exists...")
 	outDir := filepath.Join(a.Config.Data.OutputFolder)
@@ -119,10 +125,11 @@ func(a *App) prepareDirectory() {
 		errDir := os.MkdirAll(a.Config.Data.OutputFolder, os.ModePerm)
 		if errDir != nil {
 			a.Logger.Errorf("Cannot create directory for outputs because of: %q, exiting...", err)
-			os.Exit(1)
+			return err
 		}
 		a.Logger.Infof("Created output directory %q successfully", outDir)
 	} else {
 		a.Logger.Info("Output directory already there")
 	}
+	return nil
 }

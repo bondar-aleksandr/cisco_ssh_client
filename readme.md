@@ -2,7 +2,6 @@
 
 This app is a wrapper for **networklore/netrasp** package, which provides a convenient way to run commands to network devices via SSH.
 Though netrasp gives ability to work with other vendor's devices, this app is focused on cisco IOS-like commands (because of command error handlering).
-Written in go.
 
 ___
 ## Usage
@@ -42,6 +41,9 @@ ___
 | data, devices_data | Filename for csv-formatted devices file (must be inside "intput_folder" directory) |
 | data, output_folder | Directory where outputs are stored |
 | data, results_data | Filename for summary status (will be placed to "output_folder") |
+| logging, level | logging level, possible values are -1(debug), 0(info), 1(warn), 2(error) |
+| logging, encoding | logging encoding, possible values are "console", "json" |
+| logging, outputPath | list of logging destinations, such as "stderr" or relative file name |
 
 config.yml example:
 ```yaml
@@ -54,6 +56,12 @@ data:
   devices_data: "devices.csv"
   output_folder: "./output/"
   results_data: "results.txt"
+logger:
+  level: 0   
+  encoding: "json" 
+  outputPath: 
+    - "stderr"
+    - "app.log"
 ```
 ___
 **devices data file** is csv file, it must contain the following fields

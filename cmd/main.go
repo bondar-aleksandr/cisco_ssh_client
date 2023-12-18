@@ -18,12 +18,12 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-
 func main() {
 	start := time.Now()
-	app := app.NewApp("./config/config.yml")
-
-	app.Logger.Info("Starting...")
+	app, err := app.NewApp("./config/config.yml")
+	if err != nil {
+		os.Exit(1)
+	}
 
 	//graceful shutdown setup
 	ctx, cancel := context.WithCancel(context.Background())

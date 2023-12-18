@@ -6,7 +6,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"log"
 	"gopkg.in/yaml.v3"
-	// "path/filepath"
 )
 
 type loggerConfig struct {
@@ -17,24 +16,39 @@ type loggerConfig struct {
 	}
 }
 
-func InitLogger(cfgPath string) *zap.SugaredLogger {
+func InitLogger(cfgPath string) (*zap.SugaredLogger) {
 	log.Println("Initiating logger...")
+
+	var encoding string
+	var outPath []string
+	var level int8
 	
-	cfg := readLoggerConfig(cfgPath)
+	cfg, err := readLoggerConfig(cfgPath)
+	if err != nil {
+		// use defaults
+		log.Printf("Got error while reading logger config, will use default values. Error: %v\n", err)
+		encoding = "json"
+		outPath = []string{"stderr"}
+		level = 0
+
+	} else {
+		encoding = cfg.Logger.Encoding
+		outPath = cfg.Logger.OutputPath
+		level = cfg.Logger.Level
+	}
 
 	encoderCfg := zap.NewProductionEncoderConfig()
-	encoderCfg.TimeKey = "timestamp"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	config := zap.Config{
-		Level:             zap.NewAtomicLevelAt(zapcore.Level(cfg.Logger.Level)),
+		Level:             zap.NewAtomicLevelAt(zapcore.Level(level)),
         Development:       false,
         DisableCaller:     false,
         DisableStacktrace: false,
         Sampling:          nil,
-        Encoding:          cfg.Logger.Encoding,
+        Encoding:          encoding,
         EncoderConfig:     encoderCfg,
-        OutputPaths: cfg.Logger.OutputPath,
+        OutputPaths: outPath,
         ErrorOutputPaths: []string{
             "stderr",
         },
@@ -42,10 +56,10 @@ func InitLogger(cfgPath string) *zap.SugaredLogger {
 	return zap.Must(config.Build()).Sugar()
 }
 
-func readLoggerConfig(cfgPath string) *loggerConfig {
+func readLoggerConfig(cfgPath string) (*loggerConfig, error) {
 	f, err := os.Open(cfgPath)
 	if err != nil {
-		log.Fatalf("Cannot read config file because of: %s", err)
+		return nil, err
 	}
 	defer f.Close()
 
@@ -54,7 +68,7 @@ func readLoggerConfig(cfgPath string) *loggerConfig {
 	decoder := yaml.NewDecoder(f)
 	err = decoder.Decode(cfg)
 	if err != nil {
-		log.Fatalf("Cannot parse app config file because of: %s", err)
+		return nil, err
 	}
-	return cfg
+	return cfg, nil
 }
