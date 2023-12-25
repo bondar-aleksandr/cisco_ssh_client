@@ -13,17 +13,15 @@ import (
 type App struct {
 	Logger *zap.SugaredLogger
 	CmdCache map[string]*Commands
-	ConfigPath string
 	Config *config
 }
 
 func NewApp(cfgPath string) (*App, error) {
 	app := &App{
 		CmdCache: make(map[string]*Commands),
-		ConfigPath: cfgPath,
 	}
 	app.Logger = logger.InitLogger(cfgPath)
-	err := app.readConfig()
+	err := app.readConfig(cfgPath)
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +57,10 @@ type config struct {
 }
 
 // this func Unmarshals config.yml content to config variable
-func(a *App) readConfig() error {
+func(a *App) readConfig(cfgPath string) error {
 	a.Logger.Info("Reading config...")
 
-	f, err := os.Open(a.ConfigPath)
+	f, err := os.Open(cfgPath)
 	if err != nil {
 		a.Logger.Errorf("Cannot read app config file because of: %s", err)
 		return err
